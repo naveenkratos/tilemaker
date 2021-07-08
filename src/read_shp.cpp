@@ -1,4 +1,5 @@
 #include "read_shp.h"
+#include "fstream"
 
 using namespace std;
 namespace geom = boost::geometry;
@@ -38,7 +39,8 @@ void addShapefileAttributes(
 		OsmLuaProcessing &osmLuaProcessing) {
 
 	if (osmLuaProcessing.canRemapShapefiles()) {
-		// Create table object
+		string in_tableKeys[columnMap.size()]={};
+		int inTableKeysIndex=0;
 		kaguya::LuaTable in_table = osmLuaProcessing.newTable();
 		for (auto it : columnMap) {
 			int pos = it.first;
@@ -48,41 +50,78 @@ void addShapefileAttributes(
 				case 2:  in_table[key] =  DBFReadDoubleAttribute(dbf, recordNum, pos); break;
 				default: in_table[key] =  DBFReadStringAttribute(dbf, recordNum, pos); break;
 			}
+			in_tableKeys[inTableKeysIndex]=key;
+			inTableKeysIndex++;
 		}
 
 		// Call remap function
 		kaguya::LuaTable out_table = osmLuaProcessing.remapAttributes(in_table, layers.layers[oo->layer].name);
+			
+		try{
 
-		auto &attributeStore = osmLuaProcessing.getAttributeStore();
-		auto attributes = attributeStore.empty_set();
+			if(out_table.isNilref())
+				throw "Error in Mapping";
 
-		// Write values to vector tiles
-		for (auto key : out_table.keys()) {
-			kaguya::LuaRef val = out_table[key];
-			vector_tile::Tile_Value v;
-			if (val.isType<std::string>()) {
-				v.set_string_value(static_cast<std::string const&>(val));
-				layers.layers[oo->layer].attributeMap[key] = 0;
-			} else if (val.isType<int>()) {
-				if (key=="_minzoom") { oo->setMinZoom(val); continue; }
-				v.set_float_value(val);
-				layers.layers[oo->layer].attributeMap[key] = 1;
-			} else if (val.isType<double>()) {
-				v.set_float_value(val);
-				layers.layers[oo->layer].attributeMap[key] = 1;
-			} else if (val.isType<bool>()) {
-				v.set_bool_value(val);
-				layers.layers[oo->layer].attributeMap[key] = 2;
-			} else {
-				// don't even think about trying to write nested tables, thank you
-				std::cout << "Didn't recognise Lua output type: " << val << std::endl;
+
+			auto &attributeStore = osmLuaProcessing.getAttributeStore();
+			auto attributes = attributeStore.empty_set();
+
+			// Write values to vector tiles
+			for (auto key : out_table.keys()) {
+				kaguya::LuaRef val = out_table[key];
+				vector_tile::Tile_Value v;
+				if (val.isType<std::string>()) {
+					v.set_string_value(static_cast<std::string const&>(val));
+					layers.layers[oo->layer].attributeMap[key] = 0;
+				} else if (val.isType<int>()) {
+					if (key=="_minzoom") { oo->setMinZoom(val); continue; }
+					v.set_float_value(val);
+					layers.layers[oo->layer].attributeMap[key] = 1;
+				} else if (val.isType<double>()) {
+					v.set_float_value(val);
+					layers.layers[oo->layer].attributeMap[key] = 1;
+				} else if (val.isType<bool>()) {
+					v.set_bool_value(val);
+					layers.layers[oo->layer].attributeMap[key] = 2;
+				} else {
+					// don't even think about trying to write nested tables, thank you
+					std::cout << "Didn't recognise Lua output type: " << val << std::endl;
+				}
+
+				attributes->emplace(key, v, 0);
 			}
 
-			attributes->emplace(key, v, 0);
-		}
+			oo->setAttributeSet(attributeStore.store_set(attributes));	
+			oo->setAttributeSet(attributeStore.store_set(attributes));		
+			oo->setAttributeSet(attributeStore.store_set(attributes));	
+		}	
+		catch(...){
 
-		oo->setAttributeSet(attributeStore.store_set(attributes));		
+			fstream file;
+
+			try{
+
+				file.open("logger.csv",ios::app);
+				for(int index=0;index<inTableKeysIndex;index++){
+					file<<in_tableKeys[index];
+					file<<",";
+					file<<in_table[in_tableKeys[index]];
+					file<<",";
+					file<<layers.layers[oo->layer].name;
+					file<<"\n";
+				}
+				file.close();
+
+			}catch(...){
+				file.close();
+				cout<<"Error Occured"<<endl;
+			}
+			
+		}
 	} else {
+
+		cout<<"Inside else"<<endl;
+
 		auto &attributeStore = osmLuaProcessing.getAttributeStore();
 		auto attributes = attributeStore.empty_set();
 

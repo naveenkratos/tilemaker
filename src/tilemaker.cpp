@@ -141,6 +141,7 @@ int main(int argc, char* argv[]) {
 	string jsonFile;
 	uint threadNum;
 	string outputFile;
+	string logFile;
 	bool _verbose = false, sqlite= false, mergeSqlite = false, mapsplit = false;
 
 	po::options_description desc("tilemaker " STR(TM_VERSION) "\nConvert OpenStreetMap .pbf files into vector tiles\n\nAvailable options");
@@ -154,9 +155,19 @@ int main(int argc, char* argv[]) {
 		("store",  po::value< string >(&osmStoreFile),  "temporary storage for node/ways/relations data")
 		("verbose",po::bool_switch(&_verbose),                                   "verbose error output")
 		("threads",po::value< uint >(&threadNum)->default_value(0),              "number of threads (automatically detected if 0)");
+		("log",po::value< string >(&logFile)->default_value("logger.csv"),              "log .csv file");
 	po::positional_options_description p;
 	p.add("input", -1);
 	po::variables_map vm;
+	ofstream file;
+	try{
+		cout<<"Lof file:"<<logFile<<endl;
+		file.open(logFile,ios::trunc);
+		file.close();
+	}catch(...){
+		file.close();
+		cout<<"Error in log file"<<endl;
+	}
     try {
         po::store(po::command_line_parser(argc, argv).options(desc).positional(p).run(), vm);
     } catch (const po::unknown_option& ex) {
